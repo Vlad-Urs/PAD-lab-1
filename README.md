@@ -32,13 +32,13 @@ Amongst other things, Steam's microservices facilitate multiplayer game hosting,
 
 ## Service Boundaries
 The two services in this architecture can be defined as such: 
-- **Game Master Service**
+- **Authentication Service**
 
-This service would be responsible for any actions controlled by the GM (game session management, player interaction, NPCs, combat, player communication) 
+This service would be responsible for player authentication, character creation, customization, etc.
 
-- **Player Service**
+- **Game Session Service**
 
-This service will be responsible for character actions, character creations, character rolls and communication with the GM and other players.
+This service will be responsible for creating instances of each game session, using tools like Kubernetes, for handling each game session, combat, messages, movement, NPCs, etc.
 
 <img src="PAD1.PNG">
 
@@ -324,4 +324,4 @@ response:
 
 ## Deployement and Scaling
 
-Docker containers will be used for running each service and Docker Compose for managing and scaling.
+Docker containers will be used for running each service and Docker Compose and Kubernetes for managing and scaling.
