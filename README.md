@@ -18,17 +18,8 @@ With the arcane arts of microservices, we can create a scalable, easily maintain
 4. **Easily updated/expanded:** It is easier to implement new features (such as rules, or creatures, or a whole new edition of D&D) in a microservice architecture.
 
 ## Similar products
-- **Twitch**
 
-Twitch employs microservices to handle their live-streaming, live chat, and user profiles. Somewhat similar, the D&D platform would have need of real-time game sessions, and asynchronous interactions.
-
-- **EVE Online**
-
-EVE uses a microservice architecture to handle a much more complex product (the in-game economy, combat, exploration and ship customization). Something such as the D&D platform, a lot simpler in it's scope could well take after some of EVE's aspects.
-
-- **Steam**
-
-Amongst other things, Steam's microservices facilitate multiplayer game hosting, which due to them being decoupled allow for better scaling and reliability. The D&D platform could make use of a likewise structure for managing multiplayer games independently from other services.
+Most online multiplayer games (League of Legends, Fortnite, etc) use an architecture based on matchmaking, and creating a new child instance of the service for each game session.
 
 ## Service Boundaries
 The two services in this architecture can be defined as such: 
@@ -55,272 +46,209 @@ Additionally the user will employ websockets for real time communication.
 
 ## Data Management
 
-### GM API Endpoints
+### Authentication API Endpoints
 
-- ```(POST) api/GM/register```: used for registering a new GM, and creating a new campaign.
+- ```(POST) api/auth/register```: used for registering a new player.
 
 ```
-request:
+Request:
 {
-  "gm_name": "string",
+  "username": "string",
   "email": "string",
-  "password": "string",
-  "campaign_name": "string",
-  "description": "string"
+  "password": "string"
 }
-response:
+
+Response:
 {
-  "gm_id": "string",
-  "campaign_id": "string",
-  "message": "Campaign created successfully."
+  "user_id": "string",
+  "message": "Registration successful"
 }
 ```
 
 ---
 
-- ```(POST) api/GM/create-session```: Create a new game session.
+- ```(POST) api/auth/create-session```: Create a new character sheet.
 
 ```
-request:
+Request:
 {
-  "campaign_id": "string",
-  "session_name": "string",
-  "start_time": "datetime"
-}
-response:
-{
-  "session_id": "string",
-  "message": "Session created successfully."
-}
-```
-
----
-
-- ```(POST) api/GM/createNPC```: Create a new non-playable character.
-
-```
-request:
-{
-  "campaign_id": "string",
-  "npc_name": "string",
-  "npc_stats": {
+  "user_id": "string",
+  "character_name": "string",
+  "character_class": "string",
+  "character_race": "string",
+  "starting_stats": {
     "strength": "int",
     "dexterity": "int",
     "intelligence": "int",
+    "wisdom": "int",
     "charisma": "int"
   }
 }
-response:
+
+Response:
 {
-  "npc_id": "string",
-  "message": "NPC created successfully."
+  "character_id": "string",
+  "message": "Character created successfully"
 }
-```
-
----
-
-- ```(POST) api/GM/combat```: Manage combat.
 
 ```
-request:
-{
-  "session_id": "string",
-  "participants": [
-    {
-      "name": "string",
-      "type": "player | npc",
-      "current_hp": "int",
-      "action": "string"
-    }
-  ]
-}
-response:
-{
-  "combat_status": "string",
-  "message": "Combat managed successfully."
-}
-```
-
----
-
-- ```(POST,GET) api/GM/message-player```: Send and receive text messages with players.
-
-```
-request:
-{
-  "session_id": "string",
-  "player_id": "string",
-  "message": "string"
-}
-response:
-{
-  "timestamp": "datetime",
-  "message": "Message sent/received."
-}
-```
-
----
-
-- ```(POST) api/GM/roll```: Roll any type of die.
-
-```
-request:
-{
-  "die_type": "string",  // e.g., "d20", "d12", "d6"
-  "number_of_rolls": "int"
-}
-response:
-{
-  "roll_results": ["int"],
-  "total": "int"
-}
-```
-
----
-
-- ```(POST) api/GM/end-session```: Finish an existing session.
-
-```
-request:
-{
-  "session_id": "string"
-}
-response:
-{
-  "message": "Session ended successfully."
-}
-```
-
----
-
-### Player API Endpoints
 
 - ```(POST) api/auth```: Account authentication.
 
 ```
-request:
+Request:
 {
   "email": "string",
   "password": "string"
 }
-response:
+
+Response:
 {
-  "token": "string",
-  "message": "Authentication successful."
+  "user_id": "string",
+  "message": "Login successful"
 }
+
 ```
 
 ---
 
-- ```(POST) api/player/register```: Used for registering a new player, and creating a new character.
+- ```(POST) api/auth/player{character_id}```: Used for returning a player's info.
 
 ```
-request:
+Response:
 {
-  "player_name": "string",
-  "email": "string",
-  "password": "string",
+  "character_id": "string",
   "character_name": "string",
   "character_class": "string",
-  "character_stats": {
+  "character_race": "string",
+  "stats": {
     "strength": "int",
     "dexterity": "int",
-    "constitution": "int",
     "intelligence": "int",
     "wisdom": "int",
     "charisma": "int"
-  }
+  },
+  "message": "Character details retrieved successfully"
 }
-response:
-{
-  "player_id": "string",
-  "character_id": "string",
-  "message": "Player and character registered successfully."
-}
+
 ```
 
 ---
 
-- ```(PUT) api/player/{int:playerId}/update```: Update character sheet.
 
-```
-request:
-{
-  "character_name": "string",
-  "character_stats": {
-    "strength": "int",
-    "dexterity": "int",
-    "constitution": "int",
-    "intelligence": "int",
-    "wisdom": "int",
-    "charisma": "int"
-  }
-}
-response:
-{
-  "character_id": "string",
-  "message": "Character sheet updated successfully."
-}
-```
+### Game Session API Endpoints
 
 ---
 
-- ```(POST) api/player/{int:playerId}/roll```: Roll any type of die.
+- ```(POST) api/session/init```: Initialiaze a game session.
 
 ```
-request:
+Request:
 {
-  "die_type": "string",  // e.g., "d20", "d12", "d6"
-  "number_of_rolls": "int"
+  "gm_id": "string",
+  "campaign_name": "string",
+  "players": [
+    {
+      "player_id": "string",
+      "character_id": "string"
+    },
+    ...
+  ]
 }
-response:
-{
-  "roll_results": ["int"],
-  "total": "int"
-}
-```
 
----
-
-- ```(POST) api/player/{int:playerId}/message```: Message the GM or other players.
-
-```
-request:
+Response:
 {
   "session_id": "string",
-  "message": "string"
+  "message": "Game session initialized"
 }
-response:
-{
-  "timestamp": "datetime",
-  "message": "Message sent."
-}
+
 ```
 
 ---
 
-- ```(GET) api/player/{int:playerId}/stats```: View the stats of the character.
+- ```(POST) api/session/{session_id}/npc/create```: Create an NPC for a particular session.
 
 ```
-request:
+Request:
 {
-  "character_id": "string"
-}
-response:
-{
-  "character_name": "string",
-  "character_stats": {
+  "session_id": "string",
+  "npc_name": "string",
+  "npc_stats": {
     "strength": "int",
     "dexterity": "int",
-    "constitution": "int",
-    "intelligence": "int",
-    "wisdom": "int",
-    "charisma": "int"
-    "
-  }
+    "intelligence": "int"
+  },
+  "npc_role": "string"  // Example: "villain", "merchant", etc.
 }
+
+Response:
+{
+  "npc_id": "string",
+  "message": "NPC created successfully"
+}
+
+```
+
+---
+
+- ```(POST) api/session/{session_id}/combat/initiate```: Starts a combat sequence between players and NPCs.
+
+```
+Request:
+{
+  "session_id": "string",
+  "participants": [
+    {
+      "character_id": "string",
+      "npc_id": "string",
+      "action": "attack"
+    }
+  ]
+}
+
+Response:
+{
+  "combat_id": "string",
+  "message": "Combat initiated"
+}
+
+```
+
+---
+
+- ```(POST) /session/{session_id}/message/send```: Send a message within a session.
+
+```
+Request:
+{
+  "session_id": "string",
+  "sender_id": "string",
+  "message": "string"
+}
+
+Response:
+{
+  "message_id": "string",
+  "message": "Message sent successfully"
+}
+
 ```
 ---
+
+- ```(POST) /session/{session_id}/end```:Ends the current game session. 
+```
+Request:
+{
+  "session_id": "string",
+  "gm_id": "string"
+}
+
+Response:
+{
+  "message": "Game session ended"
+}
+
+```
 
 ## Deployement and Scaling
 
