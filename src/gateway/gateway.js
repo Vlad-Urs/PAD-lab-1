@@ -2,12 +2,14 @@ const express = require('express');
 const axios = require('axios');
 const rateLimit = require('express-rate-limit'); 
 
+
+
 const app = express();
 app.use(express.json());
 
 // Define service URLs
-const PLAYER_SERVICE_URL = 'http://localhost:5000';
-const GAME_SERVICE_URL = 'http://localhost:5001';
+const PLAYER_SERVICE_URL = 'http://auth_service:5000';
+const GAME_SERVICE_URL = 'http://session_service:5001';
 
 // Rate limiting middleware
 const limiter = rateLimit({
@@ -37,7 +39,8 @@ app.get('/status', async (req, res) => {
     }
 });
 
-// Forward user registration requests to the player service
+
+// Route to register a new user
 app.post('/auth/register', async (req, res) => {
     try {
         const response = await axios.post(`${PLAYER_SERVICE_URL}/auth/register`, req.body, { timeout: 3000 });
@@ -46,9 +49,17 @@ app.post('/auth/register', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to player service timed out after 3 seconds.' });
         }
-        res.status(error.response?.status || 500).json({ message: 'Error registering user', error: error.message });
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+
+        res.status(500).json({ message: 'Error registering user', error: error.message });
     }
 });
+
+
 
 // Forward user authentication requests to the player service
 app.post('/auth', async (req, res) => {
@@ -59,6 +70,12 @@ app.post('/auth', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to player service timed out after 3 seconds.' });
         }
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+
         res.status(error.response?.status || 500).json({ message: 'Error authenticating user', error: error.message });
     }
 });
@@ -72,6 +89,12 @@ app.post('/session/init', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to game service timed out after 3 seconds.' });
         }
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+
         res.status(error.response?.status || 500).json({ message: 'Error initializing game session', error: error.message });
     }
 });
@@ -86,6 +109,12 @@ app.post('/session/:session_id/npc/create', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to game service timed out after 3 seconds.' });
         }
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+
         res.status(error.response?.status || 500).json({ message: 'Error creating NPC', error: error.message });
     }
 });
@@ -100,6 +129,12 @@ app.post('/session/:session_id/combat/initiate', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to game service timed out after 3 seconds.' });
         }
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+
         res.status(error.response?.status || 500).json({ message: 'Error initiating combat', error: error.message });
     }
 });
@@ -114,6 +149,12 @@ app.post('/session/:session_id/end', async (req, res) => {
         if (error.code === 'ECONNABORTED') {
             return res.status(504).json({ message: 'Request to game service timed out after 3 seconds.' });
         }
+
+        // Propagate the service error directly
+        if (error.response) {
+            return res.status(error.response.status).json(error.response.data);
+        }
+        
         res.status(error.response?.status || 500).json({ message: 'Error ending session', error: error.message });
     }
 });

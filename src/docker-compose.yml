@@ -1,0 +1,100 @@
+version: '3'
+services:
+  auth_service:
+    build:
+      context: ./auth_service
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./auth_service/.env
+    container_name: auth_service
+    depends_on:
+      - postgres_auth
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    links:
+      - postgres_auth
+    networks:
+      - app-network
+
+
+  session_service:
+    build:
+      context: ./session_service
+      dockerfile: Dockerfile
+    ports:
+      - "5001:5001"
+    env_file:
+      - ./session_service/.env
+    container_name: session_service
+    depends_on:
+      - postgres_sesh
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    links:
+      - postgres_sesh
+    networks:
+      - app-network
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth_service
+      - session_service
+    links:
+      - auth_service
+      - session_service
+    networks:
+      - app-network
+
+  redis:
+    image: "redis:alpine"
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  postgres_auth:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: AuthDB
+    networks:
+      - app-network
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+
+  postgres_sesh:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: SessionDB
+    networks:
+      - app-network
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_session_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_user_data:
+  postgres_session_data:
+
+networks:
+  app-network:
+    driver: bridge

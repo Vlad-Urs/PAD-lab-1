@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+service ServiceInfo {
+  rpc GetServices (Empty) returns (ServiceResponse);
+  rpc DeleteService (DeleteServiceRequest) returns (DeleteServiceResponse);
+}
+
+message Empty {}
+
+message Service {
+  string serviceAddress = 1;
+  int32 servicePort = 2;
+}
+
+// ServiceEntry represents each service with its name and a list of service instances
+message ServiceEntry {
+  string serviceName = 1;                      // Name of the service (e.g., service1, service2)
+  repeated Service serviceDetails = 2;         // List of service addresses and ports for this service
+}
+
+// The ServiceResponse will return multiple ServiceEntry objects
+message ServiceResponse {
+  repeated ServiceEntry services = 1;          // List of all services and their details
+}
+
+// New message for delete request
+message DeleteServiceRequest {
+  string serviceName = 1;                      // Name of the service to delete (e.g., "service1")
+  string serviceAddress = 2;                   // Address of the service instance to delete
+  int32 servicePort = 3;                       // Port of the service instance to delete
+}
+
+// Response for the delete operation
+message DeleteServiceResponse {
+  bool success = 1;                            // Indicates if the deletion was successful
+  string message = 2;                          // Optional message providing more information
+}
