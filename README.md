@@ -29,7 +29,7 @@ This service would be responsible for player authentication, character creation,
 
 - **Game Session Service**
 
-This service will be responsible for creating instances of each game session, using tools like Kubernetes, for handling each game session, combat, messages, movement, NPCs, etc.
+This service will be responsible for handling each game session, combat, NPCs, etc.
 
 <img src="PAD1.PNG">
 
@@ -215,41 +215,16 @@ Response:
 ```
 
 ---
-
-- ```(POST) /session/{session_id}/message/send```: Send a message within a session.
-
-```
-Request:
-{
-  "session_id": "string",
-  "sender_id": "string",
-  "message": "string"
-}
-
-Response:
-{
-  "message_id": "string",
-  "message": "Message sent successfully"
-}
-
-```
 ---
-
-- ```(POST) /session/{session_id}/end```:Ends the current game session. 
-```
-Request:
-{
-  "session_id": "string",
-  "gm_id": "string"
-}
-
-Response:
-{
-  "message": "Game session ended"
-}
-
-```
 
 ## Deployement and Scaling
 
-Docker containers will be used for running each service and Docker Compose and Kubernetes for managing and scaling.
+The project is deployed using docker-compose, and the compose yml document. Each Docker container was tested using the Docker Desktop app.
+
+## Laboratory 2 updates
+
+1. Adapt the circuit breaker to ensure Service High Availability
+2. Use Prometheus and Grafana for logging and aggregation.
+3. Implement microservice-based 2 Phase Commits for an endpoint that create changes more than in one database.
+4. Implement cache hashing and high availability (if won't shoot for a higher mark).
+5. Update Databases by implementeing redundancy/replication and failover, as well as a Data Warehouse.

@@ -135,6 +135,15 @@ def create_character():
         return jsonify({"error": "Invalid character data. Required fields: 'user_id', 'character_name', 'character_class', 'character_race', 'starting_stats'"}), 400
 
     try:
+        # Check if a character with the same name already exists for this user
+        existing_character = Character.query.filter_by(
+            user_id=character_data["user_id"],
+            character_name=character_data["character_name"]
+        ).first()
+
+        if existing_character:
+            return jsonify({"error": "Character with this name already exists for this user."}), 409
+
         new_character = Character(
             user_id=character_data["user_id"],
             character_name=character_data["character_name"],
@@ -142,12 +151,14 @@ def create_character():
             character_race=character_data["character_race"],
             starting_stats=character_data["starting_stats"]
         )
+        
         db.session.add(new_character)
         db.session.commit()
         return jsonify({"character_id": new_character.id, "message": "Character created successfully"}), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 # Get user details by user_id
 @auth_routes.route('/auth/user/<int:user_id>', methods=['GET'])
@@ -156,6 +167,8 @@ def get_user(user_id):
     cached_user = cache.get(f"user:{user_id}")
     if cached_user:
         return jsonify(eval(cached_user)), 200  # Use eval to convert back to dict (caution with eval in production)
+    
+    
 
     try:
         user = User.query.get(user_id)

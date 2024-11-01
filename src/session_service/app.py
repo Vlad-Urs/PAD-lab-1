@@ -1,13 +1,14 @@
-from flask import Flask
+from flask import Flask, Blueprint, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_socketio import SocketIO, join_room, send, emit
 from dotenv import load_dotenv
 import os
-from flask import Blueprint, request, jsonify
 from sqlalchemy.dialects.postgresql import JSON
 
 load_dotenv()  # Load environment variables from .env
 
 db = SQLAlchemy()
+socketio = SocketIO()
 
 # Models
 class Session(db.Model):
@@ -17,6 +18,8 @@ class Session(db.Model):
     campaign_name = db.Column(db.String(100), nullable=False)
     status = db.Column(db.String(50), default='active')
     players = db.relationship('Player', backref='session', cascade="all, delete")
+    npcs = db.relationship('NPC', backref='session', cascade="all, delete")
+    combats = db.relationship('Combat', backref='session', cascade="all, delete")
 
 class Player(db.Model):
     __tablename__ = 'players'
@@ -136,25 +139,114 @@ def end_session(session_id):
     else:
         return jsonify({"error": "Session not found"}), 404
     
+@session_routes.route('/get_session/<int:session_id>', methods=['GET'])
+def get_session(session_id):
+    session = Session.query.get(session_id)
+    if session:
+        session_data = {
+            "session_id": session.id,
+            "gm_id": session.gm_id,
+            "campaign_name": session.campaign_name,
+            "status": session.status,
+            "players": [{"player_id": player.player_id, "character_id": player.character_id} for player in session.players],
+            "npcs": [{"npc_id": npc.id, "npc_name": npc.npc_name, "npc_stats": npc.npc_stats, "npc_role": npc.npc_role} for npc in session.npcs],
+            "combats": [{"combat_id": combat.id, "participants": combat.participants} for combat in session.combats]
+        }
+        return jsonify(session_data), 200
+    else:
+        return jsonify({"error": "Session not found"}), 404
+    
 
+@session_routes.route('/get_sessions', methods=['GET'])
+def get_sessions():
+    sessions = Session.query.all()
+    session_data = []
+    for session in sessions:
+        session_data.append({
+            "session_id": session.id,
+            "gm_id": session.gm_id,
+            "campaign_name": session.campaign_name,
+            "status": session.status,
+            "players": [{"player_id": player.player_id, "character_id": player.character_id} for player in session.players],
+            "npcs": [{"npc_id": npc.id, "npc_name": npc.npc_name, "npc_stats": npc.npc_stats, "npc_role": npc.npc_role} for npc in session.npcs],
+            "combats": [{"combat_id": combat.id, "participants": combat.participants} for combat in session.combats]
+        })
+
+    return jsonify(session_data), 200
 
 #=============================================================================================
+# WebSocket Events
+@socketio.on('connect')
+def handle_connect():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        emit('error', {'msg': 'User ID required'})
+        return
+
+    player = Player.query.filter_by(player_id=user_id).first()
+    if not player:
+        emit('error', {'msg': 'Player not found'})
+        return
+
+    session = Session.query.get(player.session_id)
+    if session:
+        join_room(f"session_{session.id}")
+        send(f'Player {user_id} connected and joined session {session.id}')
+    else:
+        emit('error', {'msg': 'No active session found for player'})
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    user_id = request.args.get('user_id')
+    if user_id:
+        send(f'Player {user_id} disconnected')
+
+@socketio.on('message')
+def handle_message(data):
+    message = data.get('message')
+    session_id = data.get('session_id')
+    if message and session_id:
+        emit('session_message', {'msg': message}, room=f'session_{session_id}')
+    else:
+        emit('error', {'msg': 'Message and session ID are required'})
+
+@socketio.on('subscribe')
+def handle_subscribe(data):
+    user_id = request.args.get('user_id')
+    player = Player.query.filter_by(player_id=user_id).first()
+    if not player:
+        emit('error', {'msg': 'Player not found'})
+        return
+
+    session = Session.query.get(player.session_id)
+    if session:
+        join_room(f"session_{session.id}")
+        emit('subscribed', {'msg': f"Subscribed to session {session.id}"})
+    else:
+        emit('error', {'msg': 'Session not found'})
+
+def notify_npc_created(session_id, npc_name):
+    emit('npc_created', {'npc_name': npc_name}, room=f'session_{session_id}')
+
+def notify_combat_started(session_id, combat_id):
+    emit('combat_started', {'combat_id': combat_id}, room=f'session_{session_id}')
+
+# Create the Flask app and integrate with SocketIO
 def create_app():
     app = Flask(__name__)
 
     # Load configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
-    
 
     # Initialize extensions
     db.init_app(app)
+    socketio.init_app(app)  # Initialize SocketIO
 
     # Register Blueprints
     app.register_blueprint(session_routes)
 
     with app.app_context():
-        # Create the tables if they don't exist
         db.create_all()
 
     return app
@@ -162,5 +254,6 @@ def create_app():
 # Create the app instance at the module level
 app = create_app()
 
+# Run both Flask and WebSocket server
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+    socketio.run(app, host="0.0.0.0", port=5001, debug=True,allow_unsafe_werkzeug=True)

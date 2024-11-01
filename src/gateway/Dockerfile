@@ -6,6 +6,7 @@ WORKDIR /app
 RUN npm init -y
 RUN npm install express axios express-rate-limit dotenv @grpc/grpc-js @grpc/proto-loader lodash
 RUN npm install consul
+RUN npm install opossum
 
 # Copy the rest of the application files
 COPY . .

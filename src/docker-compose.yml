@@ -1,5 +1,15 @@
-version: '3'
+
 services:
+
+  consul:
+    image: hashicorp/consul:1.19
+    ports:
+      - "8500:8500"
+    networks:
+      - app-network
+    command: "agent -dev -client=0.0.0.0"
+    
+
   auth_service:
     build:
       context: ./auth_service
@@ -11,19 +21,14 @@ services:
     container_name: auth_service
     depends_on:
       - postgres_auth
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+      - consul
     links:
       - postgres_auth
     networks:
       - app-network
 
 
-  session_service:
+  session_service1:
     build:
       context: ./session_service
       dockerfile: Dockerfile
@@ -31,15 +36,44 @@ services:
       - "5001:5001"
     env_file:
       - ./session_service/.env
-    container_name: session_service
+    container_name: session_service1
     depends_on:
       - postgres_sesh
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/status"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
+      - consul
+    links:
+      - postgres_sesh
+    networks:
+      - app-network
+
+  session_service2:
+    build:
+      context: ./session_service
+      dockerfile: Dockerfile
+    ports:
+      - "5002:5001"
+    env_file:
+      - ./session_service/.env
+    container_name: session_service2
+    depends_on:
+      - postgres_sesh
+      - consul
+    links:
+      - postgres_sesh
+    networks:
+      - app-network
+
+  session_service3:
+    build:
+      context: ./session_service
+      dockerfile: Dockerfile
+    ports:
+      - "5003:5001"
+    env_file:
+      - ./session_service/.env
+    container_name: session_service3
+    depends_on:
+      - postgres_sesh
+      - consul
     links:
       - postgres_sesh
     networks:
@@ -51,10 +85,12 @@ services:
       - "3000:3000"
     depends_on:
       - auth_service
-      - session_service
-    links:
-      - auth_service
-      - session_service
+      - session_service1
+      - session_service2
+      - session_service3
+      - consul
+    environment:
+      - CONSUL_HOST=consul
     networks:
       - app-network
 

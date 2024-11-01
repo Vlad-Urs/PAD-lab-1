@@ -1,0 +1,216 @@
+{
+	"info": {
+		"_postman_id": "b7236e10-f0a5-4cea-94e3-9423e58c786e",
+		"name": "PAD_lab2",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "29614547"
+	},
+	"item": [
+		{
+			"name": "authentication",
+			"item": [
+				{
+					"name": "register_user",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"username\": \"john_doe\",\r\n  \"email\": \"john6@example.com\",\r\n  \"password\": \"securepassword123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/auth/register",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "authenticate_user",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"john@example.com\",\r\n  \"password\": \"securepassword123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/auth",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"auth"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create_character",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"user_id\": 4,\r\n  \"character_name\": \"Aragorn III\",\r\n  \"character_class\": \"Ranger\",\r\n  \"character_race\": \"Human\",\r\n  \"starting_stats\": {\r\n    \"strength\": 18,\r\n    \"dexterity\": 15,\r\n    \"constitution\": 16,\r\n    \"intelligence\": 12,\r\n    \"wisdom\": 14,\r\n    \"charisma\": 13\r\n  }\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/auth/create-character",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"auth",
+								"create-character"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "session",
+			"item": [
+				{
+					"name": "init_session",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"gm_id\": 1,\r\n    \"campaign_name\": \"The Quest for the Lost Treasure III\",\r\n    \"players\": [\r\n        {\r\n            \"player_id\": 2,\r\n            \"character_id\": 3\r\n        },\r\n        {\r\n            \"player_id\": 4,\r\n            \"character_id\": 5\r\n        }\r\n    ]\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/session/init",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"session",
+								"init"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "create_npc",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"npc_name\": \"Goblin Warrior\",\r\n    \"npc_stats\": {\r\n        \"health\": 30,\r\n        \"strength\": 10,\r\n        \"agility\": 5,\r\n        \"intelligence\": 3\r\n    },\r\n    \"npc_role\": \"warrior\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/session/1/npc/create",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"session",
+								"1",
+								"npc",
+								"create"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "init_combat",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"participants\": [\r\n        {\r\n            \"player_id\": \"player1\",\r\n            \"character_id\": \"1\"\r\n        },\r\n        {\r\n            \"player_id\": \"player2\",\r\n            \"character_id\": \"2\"\r\n        }\r\n    ]\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:3000/session/1/combat/initiate",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "3000",
+							"path": [
+								"session",
+								"1",
+								"combat",
+								"initiate"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "gateway_status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:3000/status",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "3000",
+					"path": [
+						"status"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
