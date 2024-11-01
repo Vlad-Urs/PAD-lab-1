@@ -223,6 +223,8 @@ The project is deployed using docker-compose, and the compose yml document. Each
 
 ## Laboratory 2 updates
 
+<img src="PAD2.PNG">
+
 1. Adapt the circuit breaker to ensure Service High Availability
 2. Use Prometheus and Grafana for logging and aggregation.
 3. Implement microservice-based 2 Phase Commits for an endpoint that create changes more than in one database.
