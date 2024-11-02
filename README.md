@@ -221,6 +221,40 @@ Response:
 
 The project is deployed using docker-compose, and the compose yml document. Each Docker container was tested using the Docker Desktop app.
 
+## Instructions
+Here’s a general instruction you could include in your `README.md` for downloading and deploying the repository with Docker Compose:
+
+---
+
+# Deployment Instructions
+
+### Steps to Deploy
+
+1. **Clone the Repository**  
+   Start by cloning this repository to your local machine.
+   ```bash
+   git clone https://github.com/Vlad-Urs/PAD-lab-1.git
+   cd <repo-dir>
+   ```
+
+3. **Build and Run Containers**  
+   Use Docker Compose to build and start the application services.
+   ```bash
+   docker-compose up --build
+   ```
+   This will download the necessary images, build the containers, and start all services defined in the `docker-compose.yml` file.
+
+4. **Accessing the Application**  
+   Once the containers are up and running, you can access the application:
+   - **API Endpoints**: Access APIs via `http://localhost:PORT/<endpoint>`
+
+5. **Stopping the Services**  
+   To stop the running containers:
+   ```bash
+   docker-compose down
+   ```
+
+
 ## Laboratory 2 updates
 
 <img src="PAD2.PNG">
