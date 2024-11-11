@@ -100,7 +100,7 @@ updateServiceUrls();
 // Rate limiting middleware
 const limiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes window
-    max: 10, // limit each IP to 10 requests per windowMs
+    max: 100, // limit each IP to 10 requests per windowMs
     message: 'Too many requests, try again after 5 minutes'
 });
 
@@ -138,7 +138,7 @@ const getSessionServiceUrl = async () => {
 const circuitBreakerOptions = {
     timeout: 3000, // If function takes longer than 3 seconds, trigger a failure
     errorThresholdPercentage: 50, // Trip the circuit when 50% of requests fail
-    resetTimeout: 30000 // After 30 seconds, try again
+    resetTimeout: 3000 // After 30 seconds, try again
 };
 
 // Async function to check service health
@@ -193,6 +193,47 @@ app.get('/status', async (req, res) => {
     }
 });
 
+// Route to register a new session
+app.post('/session/init', async (req, res) => {
+    let tries = 0;
+    let lastError = null;
+
+    while (tries < 3) {
+        tries++;
+        const seshServiceUrl = await getSessionServiceUrl();
+        console.log(`Attempt #${tries} with service URL: ${seshServiceUrl}`);
+
+        const serviceStatus = await serviceStatusBreaker.fire(seshServiceUrl);
+        console.log('Service status:', serviceStatus.status);
+        if (serviceStatus.status != 'up') {
+            console.log(`Service ${seshServiceUrl} is down, moving to next instance.`);
+            continue; // Skip to the next instance if service is down
+        }
+
+        // Try the actual service request if breaker allows
+        try {
+            const response = await axios.post(`${seshServiceUrl}/session/init`, req.body, { timeout: 3000 });
+            return res.status(response.status).json(response.data); // Success: Return immediately
+
+        } catch (error) {
+            console.log(`Service ${seshServiceUrl} failed on attempt #${tries}`);
+            console.log('\n');
+
+            // Capture the error details for reporting after all attempts
+            lastError = error;
+            console.log('Error:', error.message);
+
+            // If the error is from a service response, return the response status and data
+            if (error.response) {
+                return res.status(error.response.status).json(error.response.data);
+            }
+        }
+    }
+
+    // After all attempts fail, respond with an error message
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    res.status(500).json({ message: 'Error registering session, all services are down', error: errorMessage });
+});
 
 
 // Route to register a new user (using dynamic service discovery)
@@ -211,24 +252,6 @@ app.post('/auth/register', async (req, res) => {
             return res.status(error.response.status).json(error.response.data);
         }
         res.status(500).json({ message: 'Error registering user', error: error.message });
-    }
-});
-
-// Route to register a new session
-app.post('/session/init', async (req, res) => {
-    try {
-        const seshServiceUrl = await getSessionServiceUrl();
-        console.log(session_counter);
-        const response = await axios.post(`${seshServiceUrl}/session/init`, req.body, { timeout: 3000 });
-        res.status(response.status).json(response.data);
-    } catch (error) {
-        if (error.code === 'ECONNABORTED') {
-            return res.status(504).json({ message: 'Request to auth game session timed out after 3 seconds.' });
-        }
-        if (error.response) {
-            return res.status(error.response.status).json(error.response.data);
-        }
-        res.status(500).json({ message: 'Error registering session', error: error.message });
     }
 });
 
