@@ -413,7 +413,7 @@ app.get('/auth/character/:characterId', async (req, res) => {
 
 
 // Start the gateway server
-const PORT = 3000;
+const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`Gateway running on http://localhost:${PORT}`);
 });

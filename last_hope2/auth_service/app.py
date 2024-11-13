@@ -5,8 +5,13 @@ import os
 from flask import Blueprint, request, jsonify
 from sqlalchemy.dialects.postgresql import JSON
 import redis
+from prometheus_client import start_http_server, Summary, Counter
 
 load_dotenv()  # Load environment variables from .env
+
+# Create a metric to track time spent and requests made.
+#REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
+UPDATE_COUNT = Counter('update_count', 'Number of updates')
 
 db = SQLAlchemy()
 cache = redis.Redis(host='redis', port=6379, db=0)  # Update host and port as necessary
@@ -54,6 +59,7 @@ auth_routes = Blueprint('auth_routes', __name__)
 # Status endpoint
 @auth_routes.route('/status', methods=['GET'])
 def status():
+    UPDATE_COUNT.inc()
     try:
         user_count = User.query.count()
         character_count = Character.query.count()

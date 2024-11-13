@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 2s
+
+scrape_configs:
+  - job_name: "gateway"
+    dns_sd_configs:
+      - names:
+        - gateway
+        type: A
+        port: 3001
+
+  - job_name: "auth_service"
+    dns_sd_configs:
+      - names:
+        - auth_service
+        type: A
+        port: 5000
+  
+  - job_name: "session_service"
+    dns_sd_configs:
+      - names:
+        - session_service
+        type: A
+        port: 5001

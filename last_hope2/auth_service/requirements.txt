@@ -7,3 +7,4 @@ Flask-Cors==4.0.1
 flask_apscheduler
 redis
 psycopg2-binary
+prometheus-client

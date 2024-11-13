@@ -1,6 +1,28 @@
 
 services:
 
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - app-network
+
+  grafana:
+    hostname: grafana
+    image: grafana/grafana
+    ports:
+      - 3000:3000
+    networks:
+      - app-network
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
   consul:
     image: hashicorp/consul:1.19
     ports:
@@ -82,7 +104,7 @@ services:
   gateway:
     build: ./gateway
     ports:
-      - "3000:3000"
+      - "3001:3001"
     depends_on:
       - auth_service
       - session_service1
@@ -130,6 +152,8 @@ services:
 volumes:
   postgres_user_data:
   postgres_session_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   app-network:
