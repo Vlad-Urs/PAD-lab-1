@@ -138,7 +138,7 @@ const getSessionServiceUrl = async () => {
 const circuitBreakerOptions = {
     timeout: 3000, // If function takes longer than 3 seconds, trigger a failure
     errorThresholdPercentage: 50, // Trip the circuit when 50% of requests fail
-    resetTimeout: 3000 // After 30 seconds, try again
+    resetTimeout: 3000 // After 3 seconds, try again
 };
 
 // Async function to check service health
@@ -195,45 +195,47 @@ app.get('/status', async (req, res) => {
 
 // Route to register a new session
 app.post('/session/init', async (req, res) => {
-    let tries = 0;
+    const maxRetries = 3;
+    let sessionInstances = await consul.agent.service.list();
+    sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
     let lastError = null;
 
-    while (tries < 3) {
-        tries++;
-        const seshServiceUrl = await getSessionServiceUrl();
-        console.log(`Attempt #${tries} with service URL: ${seshServiceUrl}`);
+    for (let i = 0; i < sessionInstances.length; i++) {
+        const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
+        let attempt = 0;
 
-        const serviceStatus = await serviceStatusBreaker.fire(seshServiceUrl);
-        console.log('Service status:', serviceStatus.status);
-        if (serviceStatus.status != 'up') {
-            console.log(`Service ${seshServiceUrl} is down, moving to next instance.`);
-            continue; // Skip to the next instance if service is down
-        }
+        while (attempt < maxRetries) {
+            attempt++;
+            console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
 
-        // Try the actual service request if breaker allows
-        try {
-            const response = await axios.post(`${seshServiceUrl}/session/init`, req.body, { timeout: 3000 });
-            return res.status(response.status).json(response.data); // Success: Return immediately
+            try {
+                const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
+                if (serviceStatus.status !== 'up') {
+                    console.log(`Service ${seshServiceUrl} is down.`);
+                    throw new Error('Service instance is down');
+                }
 
-        } catch (error) {
-            console.log(`Service ${seshServiceUrl} failed on attempt #${tries}`);
-            console.log('\n');
+                // If service is up, attempt the actual service request
+                const response = await axios.post(`${seshServiceUrl}/session/init`, req.body, { timeout: 3000 });
+                return res.status(response.status).json(response.data); // Success: Return immediately
 
-            // Capture the error details for reporting after all attempts
-            lastError = error;
-            console.log('Error:', error.message);
+            } catch (error) {
+                console.log(`Service ${seshServiceUrl} failed on attempt #${attempt}`);
+                lastError = error;
 
-            // If the error is from a service response, return the response status and data
-            if (error.response) {
-                return res.status(error.response.status).json(error.response.data);
+                if (attempt === maxRetries) {
+                    console.log(`Instance ${seshServiceUrl} not working, checking next.`);
+                    res.setHeader('Warning', `Instance ${seshServiceUrl} not working, checking next`);
+                }
             }
         }
     }
 
-    // After all attempts fail, respond with an error message
+    // After all instances fail, respond with an error message
     const errorMessage = lastError ? lastError.message : 'Unknown error';
-    res.status(500).json({ message: 'Error registering session, all services are down', error: errorMessage });
+    res.status(500).json({ message: 'Error registering session, all instances are down', error: errorMessage });
 });
+
 
 
 // Route to register a new user (using dynamic service discovery)
@@ -255,41 +257,104 @@ app.post('/auth/register', async (req, res) => {
     }
 });
 
+
 // Route to create an NPC for a particular session
 app.post('/session/:session_id/npc/create', async (req, res) => {
-    try {
-        const seshServiceUrl = await getSessionServiceUrl();
-        const sessionId = req.params.session_id; // Extracting session ID from the route parameters
-        const response = await axios.post(`${seshServiceUrl}/session/${sessionId}/npc/create`, req.body, { timeout: 3000 });
-        res.status(response.status).json(response.data);
-    } catch (error) {
-        if (error.code === 'ECONNABORTED') {
-            return res.status(504).json({ message: 'Request to create NPC timed out after 3 seconds.' });
+    const maxRetries = 3;
+    let sessionInstances = await consul.agent.service.list();
+    sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
+    let lastError = null;
+    const sessionId = req.params.session_id; // Extracting session ID from the route parameters
+
+    for (let i = 0; i < sessionInstances.length; i++) {
+        const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
+        let attempt = 0;
+
+        while (attempt < maxRetries) {
+            attempt++;
+            console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
+
+            try {
+                const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
+                if (serviceStatus.status !== 'up') {
+                    console.log(`Service ${seshServiceUrl} is down.`);
+                    throw new Error('Service instance is down');
+                }
+
+                // If service is up, attempt the actual service request
+                const response = await axios.post(`${seshServiceUrl}/session/${sessionId}/npc/create`, req.body, { timeout: 3000 });
+                return res.status(response.status).json(response.data); // Success: Return immediately
+
+            } catch (error) {
+                console.log(`Service ${seshServiceUrl} failed on attempt #${attempt}`);
+                lastError = error;
+
+                if (attempt === maxRetries) {
+                    console.log(`Instance ${seshServiceUrl} not working, checking next.`);
+                    res.setHeader('Warning', `Instance ${seshServiceUrl} not working, checking next`);
+                }
+
+                if (error.code === 'ECONNABORTED') {
+                    console.log('Request timed out after 3 seconds');
+                }
+            }
         }
-        if (error.response) {
-            return res.status(error.response.status).json(error.response.data);
-        }
-        res.status(500).json({ message: 'Error creating NPC', error: error.message });
     }
+
+    // After all instances fail, respond with an error message
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    res.status(500).json({ message: 'Error creating NPC, all instances are down', error: errorMessage });
 });
 
-// Route to start a combat sequence
+
+// Route to initiate a combat sequence
 app.post('/session/:session_id/combat/initiate', async (req, res) => {
-    try {
-        const seshServiceUrl = await getSessionServiceUrl();
-        const sessionId = req.params.session_id; // Extracting session ID from the route parameters
-        const response = await axios.post(`${seshServiceUrl}/session/${sessionId}/combat/initiate`, req.body, { timeout: 3000 });
-        res.status(response.status).json(response.data);
-    } catch (error) {
-        if (error.code === 'ECONNABORTED') {
-            return res.status(504).json({ message: 'Request to initiate combat timed out after 3 seconds.' });
+    const maxRetries = 3;
+    let sessionInstances = await consul.agent.service.list();
+    sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
+    let lastError = null;
+    const sessionId = req.params.session_id; // Extracting session ID from the route parameters
+
+    for (let i = 0; i < sessionInstances.length; i++) {
+        const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
+        let attempt = 0;
+
+        while (attempt < maxRetries) {
+            attempt++;
+            console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
+
+            try {
+                const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
+                if (serviceStatus.status !== 'up') {
+                    console.log(`Service ${seshServiceUrl} is down.`);
+                    throw new Error('Service instance is down');
+                }
+
+                // If service is up, attempt the actual service request
+                const response = await axios.post(`${seshServiceUrl}/session/${sessionId}/combat/initiate`, req.body, { timeout: 3000 });
+                return res.status(response.status).json(response.data); // Success: Return immediately
+
+            } catch (error) {
+                console.log(`Service ${seshServiceUrl} failed on attempt #${attempt}`);
+                lastError = error;
+
+                if (attempt === maxRetries) {
+                    console.log(`Instance ${seshServiceUrl} not working, checking next.`);
+                    res.setHeader('Warning', `Instance ${seshServiceUrl} not working, checking next`);
+                }
+
+                if (error.code === 'ECONNABORTED') {
+                    console.log('Request timed out after 3 seconds');
+                }
+            }
         }
-        if (error.response) {
-            return res.status(error.response.status).json(error.response.data);
-        }
-        res.status(500).json({ message: 'Error initiating combat', error: error.message });
     }
+
+    // After all instances fail, respond with an error message
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    res.status(500).json({ message: 'Error initiating combat, all instances are down', error: errorMessage });
 });
+
 
 
 // Authenticate a user
