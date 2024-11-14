@@ -50,15 +50,18 @@ services:
       - app-network
 
 
-  session_service1:
+  session_service:
     build:
       context: ./session_service
       dockerfile: Dockerfile
-    ports:
-      - "5001:5001"
+    deploy:
+      mode: replicated
+      replicas: 3
+      endpoint_mode: dnsrr  # Enable DNS round-robin for dynamic port assignment
+    environment:
+      - SERVICE_PORT=5001  # Internal service port (consistent across replicas)
     env_file:
       - ./session_service/.env
-    container_name: session_service1
     depends_on:
       - postgres_sesh
       - consul
@@ -67,49 +70,14 @@ services:
     networks:
       - app-network
 
-  session_service2:
-    build:
-      context: ./session_service
-      dockerfile: Dockerfile
-    ports:
-      - "5002:5001"
-    env_file:
-      - ./session_service/.env
-    container_name: session_service2
-    depends_on:
-      - postgres_sesh
-      - consul
-    links:
-      - postgres_sesh
-    networks:
-      - app-network
-
-  session_service3:
-    build:
-      context: ./session_service
-      dockerfile: Dockerfile
-    ports:
-      - "5003:5001"
-    env_file:
-      - ./session_service/.env
-    container_name: session_service3
-    depends_on:
-      - postgres_sesh
-      - consul
-    links:
-      - postgres_sesh
-    networks:
-      - app-network
-
+  
   gateway:
     build: ./gateway
     ports:
       - "3001:3001"
     depends_on:
       - auth_service
-      - session_service1
-      - session_service2
-      - session_service3
+      - session_service
       - consul
     environment:
       - CONSUL_HOST=consul

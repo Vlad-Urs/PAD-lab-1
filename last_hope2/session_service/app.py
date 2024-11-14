@@ -4,8 +4,11 @@ from flask_socketio import SocketIO, join_room, send, emit
 from dotenv import load_dotenv
 import os
 from sqlalchemy.dialects.postgresql import JSON
+from prometheus_client import start_http_server, Counter,generate_latest
 
 load_dotenv()  # Load environment variables from .env
+
+request_couter = Counter('session_requests', 'Number of requests')
 
 db = SQLAlchemy()
 socketio = SocketIO()
@@ -44,9 +47,15 @@ class Combat(db.Model):
 
 session_routes = Blueprint('session_routes', __name__)
 
+# Prometheus endpoint for Prometheus to scrape metrics
+@session_routes.route('/metrics')
+def metrics():
+    return generate_latest(), 200
+
 # Status endpoint
 @session_routes.route('/status', methods=['GET'])
 def status():
+    request_couter.inc()
     try:
         session_count = Session.query.count()
         npc_count = NPC.query.count()
@@ -69,6 +78,7 @@ def status():
 # Initialize a game session
 @session_routes.route('/session/init', methods=['POST'])
 def initialize_session():
+    request_couter.inc()
     data = request.get_json()
 
     if not data or not data.get("gm_id") or not data.get("campaign_name") or not data.get("players"):
@@ -93,6 +103,7 @@ def initialize_session():
 # Create an NPC for a particular session
 @session_routes.route('/session/<int:session_id>/npc/create', methods=['POST'])
 def create_npc(session_id):
+    request_couter.inc()
     data = request.get_json()
 
     if not data or not data.get("npc_name") or not data.get("npc_stats") or not data.get("npc_role"):
@@ -112,6 +123,7 @@ def create_npc(session_id):
 # Start a combat sequence
 @session_routes.route('/session/<int:session_id>/combat/initiate', methods=['POST'])
 def initiate_combat(session_id):
+    request_couter.inc()
     data = request.get_json()
 
     if not data or not data.get("participants"):
@@ -126,6 +138,7 @@ def initiate_combat(session_id):
 # End a session
 @session_routes.route('/session/<int:session_id>/end', methods=['POST'])
 def end_session(session_id):
+    request_couter.inc()
     data = request.get_json()
 
     if not data or not data.get("gm_id"):
@@ -141,6 +154,7 @@ def end_session(session_id):
     
 @session_routes.route('/get_session/<int:session_id>', methods=['GET'])
 def get_session(session_id):
+    request_couter.inc()
     session = Session.query.get(session_id)
     if session:
         session_data = {
@@ -159,6 +173,7 @@ def get_session(session_id):
 
 @session_routes.route('/get_sessions', methods=['GET'])
 def get_sessions():
+    request_couter.inc()
     sessions = Session.query.all()
     session_data = []
     for session in sessions:
@@ -257,3 +272,6 @@ app = create_app()
 # Run both Flask and WebSocket server
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5001, debug=True,allow_unsafe_werkzeug=True)
+
+    # Start a separate HTTP server for Prometheus metrics on port 8000
+    start_http_server(8001)

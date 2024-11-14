@@ -15,7 +15,7 @@ scrape_configs:
         - auth_service
         type: A
         port: 5000
-  
+
   - job_name: "session_service"
     dns_sd_configs:
       - names:

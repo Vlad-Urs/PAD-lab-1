@@ -3,6 +3,7 @@ const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const Consul = require('consul');
 const CircuitBreaker = require('opossum');
+const metrics_client = require('prom-client');
 
 let session_counter = 0;
 
@@ -15,6 +16,23 @@ const consul = new Consul({
 });
 
 let serviceUrls = {};  // To store latest URLs of services from Consul
+let request_counter = 0;
+
+// prometheus setup
+const metricsRegistry = new metrics_client.Registry();
+const gauge = new metrics_client.Gauge({
+  name: "gateway_request_count",
+  help: "Number of requests received",
+  collect(){
+    this.set(request_counter)
+  }
+})
+metricsRegistry.registerMetric(gauge)
+
+function updateRequestCount(req,res,next){
+    request_counter++
+    next();
+  }
 
 
 
@@ -38,24 +56,24 @@ async function deregisterAllServices() {
 // Example usage: Call this function to remove all services
 //deregisterAllServices();
 
-// Service registration function with automated instance registration
 async function registerServices() {
     const services = [
         {
             name: 'auth_service',
             id: 'auth_service_1',
-            address: `auth_service`,
+            address: 'auth_service',
             port: 5000
         }
     ];
 
-    const numSessionInstances = 3; // Define the number of session_service instances here
+    // Register each session_service instance under the same name and port
+    const numSessionInstances = 3;  // Define the number of session_service instances here
     for (let i = 1; i <= numSessionInstances; i++) {
         services.push({
-            name: `session_service${i}`,
-            id: `session_service_${i}`,
-            address: `session_service${i}`,
-            port: 5001
+            name: `session_service${i}`,           // Use the same name for each instance
+            id: `session_service_${i}`,        // Unique ID for each instance
+            address: 'session_service',        // Service name as defined in Docker Compose
+            port: 5001                         // The internal service port
         });
     }
 
@@ -69,7 +87,8 @@ async function registerServices() {
         console.log(`${service.name} with ID ${service.id} registered with Consul`);
     }
 }
-registerServices()
+
+registerServices();
 
 // Function to periodically update service URLs from Consul
 async function updateServiceUrls() {
@@ -106,34 +125,8 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-const getSessionServiceUrl = async () => {
-    try {
-        // Retrieve all services from Consul
-        const services = await consul.agent.service.list();
-        
-        // Filter for session services
-        const seshServices = Object.values(services).filter(service => service.Service.includes('session_service'));
-        
-        if (seshServices.length === 0) {
-            throw new Error('No session services found');
-        }
 
-        // Construct the session service URL using the current counter
-        const seshServiceUrl = `http://${seshServices[session_counter].Address}:${seshServices[session_counter].Port}`;
-        
-        // Increment and reset the session counter
-        session_counter++;
-        if (session_counter >= seshServices.length) {
-            session_counter = 0; // Reset counter if it exceeds the available services
-        }
-        
-        return seshServiceUrl;
-    } catch (error) {
-        console.error('Error retrieving session service URL:', error.message);
-        throw error; // Rethrow the error for handling elsewhere
-    }
-};
-
+// Circuit breaker stuff
 
 const circuitBreakerOptions = {
     timeout: 3000, // If function takes longer than 3 seconds, trigger a failure
@@ -147,15 +140,22 @@ async function checkServiceStatus(serviceUrl) {
     return { status: 'up', response: response.data };
 }
 
-
 // Create the circuit breaker for the service check
 const serviceStatusBreaker = new CircuitBreaker(checkServiceStatus, circuitBreakerOptions);
 
 // Circuit breaker fallback if open
 serviceStatusBreaker.fallback(() => ({ status: 'service is down DDD:' }));
 
+//=======================================================================================================
+
+// Prometeus metrics
+app.get("/metrics", async (req, res) => {
+    res.set('Content-Type', metricsRegistry.contentType);
+    res.end(await metricsRegistry.metrics());
+  })
+
 // Simplified status route using circuit breaker
-app.get('/status', async (req, res) => {
+app.get('/status', updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const serviceChecks = Object.values(services).map(async (service) => {
@@ -194,7 +194,7 @@ app.get('/status', async (req, res) => {
 });
 
 // Route to register a new session
-app.post('/session/init', async (req, res) => {
+app.post('/session/init',updateRequestCount, async (req, res) => {
     const maxRetries = 3;
     let sessionInstances = await consul.agent.service.list();
     sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
@@ -239,7 +239,7 @@ app.post('/session/init', async (req, res) => {
 
 
 // Route to register a new user (using dynamic service discovery)
-app.post('/auth/register', async (req, res) => {
+app.post('/auth/register',updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const authServices = Object.values(services).filter(service => service.Service === 'auth_service');
@@ -259,7 +259,7 @@ app.post('/auth/register', async (req, res) => {
 
 
 // Route to create an NPC for a particular session
-app.post('/session/:session_id/npc/create', async (req, res) => {
+app.post('/session/:session_id/npc/create',updateRequestCount, async (req, res) => {
     const maxRetries = 3;
     let sessionInstances = await consul.agent.service.list();
     sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
@@ -308,7 +308,7 @@ app.post('/session/:session_id/npc/create', async (req, res) => {
 
 
 // Route to initiate a combat sequence
-app.post('/session/:session_id/combat/initiate', async (req, res) => {
+app.post('/session/:session_id/combat/initiate',updateRequestCount, async (req, res) => {
     const maxRetries = 3;
     let sessionInstances = await consul.agent.service.list();
     sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
@@ -356,9 +356,8 @@ app.post('/session/:session_id/combat/initiate', async (req, res) => {
 });
 
 
-
 // Authenticate a user
-app.post('/auth', async (req, res) => {
+app.post('/auth',updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const authServices = Object.values(services).filter(service => service.Service === 'auth_service');
@@ -371,7 +370,7 @@ app.post('/auth', async (req, res) => {
 });
 
 // Create a new character
-app.post('/auth/create-character', async (req, res) => {
+app.post('/auth/create-character',updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const authServices = Object.values(services).filter(service => service.Service === 'auth_service');
@@ -384,7 +383,7 @@ app.post('/auth/create-character', async (req, res) => {
 });
 
 // Get user details by user_id
-app.get('/auth/user/:userId', async (req, res) => {
+app.get('/auth/user/:userId',updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const authServices = Object.values(services).filter(service => service.Service === 'auth_service');
@@ -397,7 +396,7 @@ app.get('/auth/user/:userId', async (req, res) => {
 });
 
 // Get character details by character_id
-app.get('/auth/character/:characterId', async (req, res) => {
+app.get('/auth/character/:characterId',updateRequestCount, async (req, res) => {
     try {
         const services = await consul.agent.service.list();
         const authServices = Object.values(services).filter(service => service.Service === 'auth_service');

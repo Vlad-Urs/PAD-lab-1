@@ -5,13 +5,13 @@ import os
 from flask import Blueprint, request, jsonify
 from sqlalchemy.dialects.postgresql import JSON
 import redis
-from prometheus_client import start_http_server, Summary, Counter
+from prometheus_client import start_http_server, Counter,generate_latest
 
 load_dotenv()  # Load environment variables from .env
 
 # Create a metric to track time spent and requests made.
 #REQUEST_TIME = Summary('request_processing_seconds', 'Time spent processing request')
-UPDATE_COUNT = Counter('update_count', 'Number of updates')
+request_couter = Counter('auth_requests', 'Number of requests')
 
 db = SQLAlchemy()
 cache = redis.Redis(host='redis', port=6379, db=0)  # Update host and port as necessary
@@ -56,10 +56,15 @@ class Character(db.Model):
     
 auth_routes = Blueprint('auth_routes', __name__)
 
+# Prometheus endpoint for Prometheus to scrape metrics
+@auth_routes.route('/metrics')
+def metrics():
+    return generate_latest(), 200
+
 # Status endpoint
 @auth_routes.route('/status', methods=['GET'])
 def status():
-    UPDATE_COUNT.inc()
+    request_couter.inc()
     try:
         user_count = User.query.count()
         character_count = Character.query.count()
@@ -80,6 +85,7 @@ def status():
 # Delete all users and characters
 @auth_routes.route("/delete_all_users", methods=['DELETE'])
 def delete_all_users():
+    request_couter.inc()
     try:
         db.session.query(User).delete()
         db.session.query(Character).delete()
@@ -92,6 +98,7 @@ def delete_all_users():
 # Register a new user
 @auth_routes.route('/auth/register', methods=['POST'])
 def register_user():
+    request_couter.inc()
     user_data = request.json
 
     if not user_data or not user_data.get("username") or not user_data.get("email") or not user_data.get("password"):
@@ -117,6 +124,7 @@ def register_user():
 # Authenticate a user
 @auth_routes.route('/auth', methods=['POST'])
 def authenticate_user():
+    request_couter.inc()
     auth_data = request.json
 
     if not auth_data or not auth_data.get("email") or not auth_data.get("password"):
@@ -135,6 +143,7 @@ def authenticate_user():
 # Create a new character
 @auth_routes.route('/auth/create-character', methods=['POST'])
 def create_character():
+    request_couter.inc()
     character_data = request.json
 
     if not character_data or not character_data.get("user_id") or not character_data.get("character_name") or not character_data.get("character_class") or not character_data.get("character_race") or not character_data.get("starting_stats"):
@@ -169,6 +178,7 @@ def create_character():
 # Get user details by user_id
 @auth_routes.route('/auth/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
+    request_couter.inc()
     # Check cache first
     cached_user = cache.get(f"user:{user_id}")
     if cached_user:
@@ -199,6 +209,7 @@ def get_user(user_id):
 # Get character details by character_id
 @auth_routes.route('/auth/character/<int:character_id>', methods=['GET'])
 def get_player_character(character_id):
+    request_couter.inc()
     # Check cache first
     cached_character = cache.get(f"character:{character_id}")
     if cached_character:
@@ -246,6 +257,7 @@ def get_player_character(character_id):
 # Get all registered users
 @auth_routes.route('/get_users', methods=['GET'])
 def get_users():
+    request_couter.inc()
     try:
         users = User.query.all()
         return jsonify({
@@ -260,6 +272,7 @@ def get_users():
 # Get all registered characters
 @auth_routes.route('/get_characters', methods=['GET'])
 def get_characters():
+    request_couter.inc()
     try:
         characters = Character.query.all()
         return jsonify({
@@ -298,7 +311,11 @@ def create_app():
 # Create the app instance at the module level
 app = create_app()
 
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
 
+    # Start a separate HTTP server for Prometheus metrics on port 8000
+    start_http_server(8000)
 
