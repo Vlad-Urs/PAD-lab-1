@@ -8,3 +8,4 @@ Flask-SocketIO
 redis
 psycopg2-binary
 prometheus_client
+flask-cors

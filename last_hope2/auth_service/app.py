@@ -6,6 +6,8 @@ from flask import Blueprint, request, jsonify
 from sqlalchemy.dialects.postgresql import JSON
 import redis
 from prometheus_client import start_http_server, Counter,generate_latest
+from flask_cors import CORS
+import logging
 
 load_dotenv()  # Load environment variables from .env
 
@@ -30,8 +32,6 @@ class User(db.Model):
         self.email = email
         self.password = password
 
-    def __repr__(self):
-        return f"<User {self.title}>"
 
 # Define the Character model
 class Character(db.Model):
@@ -55,6 +55,7 @@ class Character(db.Model):
         return f"<Character {self.title}>"
     
 auth_routes = Blueprint('auth_routes', __name__)
+CORS(auth_routes) 
 
 # Prometheus endpoint for Prometheus to scrape metrics
 @auth_routes.route('/metrics')
@@ -277,13 +278,42 @@ def get_characters():
         characters = Character.query.all()
         return jsonify({
             "characters": [
-                {"id": char.id, "character_name": char.character_name, "character_class": char.character_class, "character_race": char.character_race} for char in characters
+                {"id": char.id, "character_name": char.character_name, "user_id":char.user_id ,"character_class": char.character_class, "character_race": char.character_race} for char in characters
             ]
         }), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     
+
+@auth_routes.route('/auth/transfer-character', methods=['POST'])
+def transfer_character_ownership():
+    data = request.get_json()
+    print(data, flush=True)
+
+    old_user_id = int(data.get('old_player_id'))
+    new_user_id = int(data.get('new_player_id'))
+    character_id = int(data.get("character_id"))
+
+    if not old_user_id or not new_user_id or not character_id:
+        return jsonify({"error": "Invalid input data"}), 400
+
+    try:
+        db.session.expire_all()  # Refresh stale objects in the current session
+        # This query fails for some reason 
+        character = Character.query.filter_by(id=character_id, user_id=old_user_id).first()
+        if not character:
+            return jsonify({"error": f"Character not found"}), 404
+
+        character.user_id = new_user_id
+        db.session.commit()
+
+        return jsonify({"message": "Character ownership updated"}), 200
+
+    except Exception as e:
+        print(f"Error occurred in auth_service: {e}")
+        return jsonify({"error": "Failed to update character ownership", "details": str(e)}), 500
+
 
 #===============================================================================================================================
 

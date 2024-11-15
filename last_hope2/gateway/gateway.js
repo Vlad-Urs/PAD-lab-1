@@ -408,6 +408,110 @@ app.get('/auth/character/:characterId',updateRequestCount, async (req, res) => {
     }
 });
 
+// Route to get all players from all sessions
+app.get('/players/all', updateRequestCount, async (req, res) => {
+    const maxRetries = 3;
+    let sessionInstances = await consul.agent.service.list();
+    sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
+    let lastError = null;
+
+    for (let i = 0; i < sessionInstances.length; i++) {
+        const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
+        let attempt = 0;
+
+        while (attempt < maxRetries) {
+            attempt++;
+            console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
+
+            try {
+                // Check service status using circuit breaker
+                const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
+                if (serviceStatus.status !== 'up') {
+                    console.log(`Service ${seshServiceUrl} is down.`);
+                    throw new Error('Service instance is down');
+                }
+
+                // Fetch players if the service is up
+                const response = await axios.get(`${seshServiceUrl}/players/all`, { timeout: 3000 });
+                return res.status(response.status).json(response.data); // Return response on success
+
+            } catch (error) {
+                console.log(`Service ${seshServiceUrl} failed on attempt #${attempt}`);
+                lastError = error;
+
+                if (attempt === maxRetries) {
+                    console.log(`Instance ${seshServiceUrl} not working, checking next.`);
+                    res.setHeader('Warning', `Instance ${seshServiceUrl} not working, checking next`);
+                }
+
+                if (error.code === 'ECONNABORTED') {
+                    console.log('Request timed out after 3 seconds');
+                }
+            }
+        }
+    }
+
+    // If all instances fail, return an error response
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    res.status(500).json({ message: 'Error fetching players, all instances are down', error: errorMessage });
+});
+
+
+app.post('/session/transfer-character', updateRequestCount, async (req, res) => {
+    const maxRetries = 3;
+    let sessionInstances = await consul.agent.service.list();
+    sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
+    let lastError = null;
+
+    for (let i = 0; i < sessionInstances.length; i++) {
+        const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
+        let attempt = 0;
+
+        while (attempt < maxRetries) {
+            attempt++;
+            console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
+
+            try {
+                // Check the service status
+                const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
+                if (serviceStatus.status !== 'up') {
+                    console.log(`Service ${seshServiceUrl} is down.`);
+                    throw new Error('Service instance is down');
+                }
+
+                // Perform the actual request
+                console.log("Payload sent to session_service:", req.body);
+                const response = await axios.post(`${seshServiceUrl}/session/transfer-character`, req.body, { timeout: 3000 });
+
+                if (response.status === 200) {
+                    return res.status(200).json(response.data); // Success: Exit immediately
+                } else {
+                    lastError = response.data;
+                    res.status(response.status).json(response.data); // Pass error to client
+                    return;
+                }
+
+            } catch (error) {
+                console.error(`Service ${seshServiceUrl} failed on attempt #${attempt}:`, error.response?.data || error.message);
+                lastError = error.response ? error.response.data : { message: error.message };
+
+                if (attempt === maxRetries) {
+                    console.log(`Instance ${seshServiceUrl} not working, checking next.`);
+                }
+
+                if (error.code === 'ECONNABORTED') {
+                    console.log('Request timed out after 3 seconds');
+                }
+            }
+        }
+    }
+
+    // Return the last captured error after all retries fail
+    const errorMessage = lastError || { message: 'Unknown error occurred in all session service instances' };
+    res.status(500).json(errorMessage);
+});
+
+
 
 
 
