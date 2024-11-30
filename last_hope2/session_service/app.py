@@ -267,28 +267,16 @@ def transfer_character():
 
         player.player_id = new_player_id
         db.session.commit()
-
-        # Step 1: Update Character ownership in auth_service
-        auth_response = requests.post(
-            'http://auth_service:5000/auth/transfer-character',
-            json={
-                "session_id": session_id,
-                "old_player_id": old_player_id,
-                "new_player_id": new_player_id,
-                "character_id": character_id
-            },
-            timeout=5
-        )
-        if auth_response.status_code != 200:
-            return jsonify({"error": "Auth service failed", "details": auth_response.json()}), auth_response.status_code
-
         
 
         return jsonify({"message": "Character ownership transferred successfully"}), 200
 
     except Exception as e:
         print(f"Error occurred in session_service: {e}")
-        db.session.rollback()  # Roll back changes if something fails
+        #db.session.rollback()  # Roll back changes if something fails
+        player.player_id = old_player_id
+        db.session.commit()
+
         return jsonify({"error": "Transaction failed", "details": str(e)}), 500
 
     

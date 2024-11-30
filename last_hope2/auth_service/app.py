@@ -312,6 +312,11 @@ def transfer_character_ownership():
 
     except Exception as e:
         print(f"Error occurred in auth_service: {e}")
+
+        character.player_id = old_user_id
+        db.session.commit()
+
+
         return jsonify({"error": "Failed to update character ownership", "details": str(e)}), 500
 
 

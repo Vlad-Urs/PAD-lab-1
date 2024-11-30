@@ -463,6 +463,13 @@ app.post('/session/transfer-character', updateRequestCount, async (req, res) => 
     sessionInstances = Object.values(sessionInstances).filter(service => service.Service.includes('session_service'));
     let lastError = null;
 
+    const payload = req.body;
+    const { session_id, old_player_id, new_player_id, character_id } = payload;
+
+    if (!session_id || !old_player_id || !new_player_id || !character_id) {
+        return res.status(400).json({ error: "Invalid input data" });
+    }
+
     for (let i = 0; i < sessionInstances.length; i++) {
         const seshServiceUrl = `http://${sessionInstances[i].Address}:${sessionInstances[i].Port}`;
         let attempt = 0;
@@ -472,28 +479,42 @@ app.post('/session/transfer-character', updateRequestCount, async (req, res) => 
             console.log(`Attempt #${attempt} with service URL: ${seshServiceUrl}`);
 
             try {
-                // Check the service status
+                // Check the session service status
                 const serviceStatus = await serviceStatusBreaker.fire(`${seshServiceUrl}/status`);
                 if (serviceStatus.status !== 'up') {
                     console.log(`Service ${seshServiceUrl} is down.`);
                     throw new Error('Service instance is down');
                 }
 
-                // Perform the actual request
-                console.log("Payload sent to session_service:", req.body);
-                const response = await axios.post(`${seshServiceUrl}/session/transfer-character`, req.body, { timeout: 3000 });
+                // Call session_service to transfer character
+                console.log("Calling session_service to transfer character...");
+                const seshResponse = await axios.post(`${seshServiceUrl}/session/transfer-character`, payload, { timeout: 3000 });
 
-                if (response.status === 200) {
-                    return res.status(200).json(response.data); // Success: Exit immediately
-                } else {
-                    lastError = response.data;
-                    res.status(response.status).json(response.data); // Pass error to client
-                    return;
+                if (seshResponse.status === 200) {
+                    console.log("Session service transfer successful. Proceeding to auth_service...");
+
+                    // Call auth_service to transfer character ownership
+                    const authResponse = await axios.post(`http://auth_service:5000/auth/transfer-character`, payload, { timeout: 3000 });
+
+                    if (authResponse.status === 200) {
+                        console.log("Auth service transfer successful.");
+                        return res.status(200).json({ message: 'Character transfer successful' });
+                    } else {
+                        console.error("Auth service transfer failed. Initiating compensation...");
+                        // Reverse the transfer in session_service
+                        const compensationPayload = { ...payload, new_player_id: old_player_id, old_player_id: new_player_id };
+                        await axios.post(`${seshServiceUrl}/session/transfer-character`, compensationPayload, { timeout: 3000 });
+
+                        return res.status(500).json({
+                            error: "Auth service failed. Compensation completed in session_service.",
+                            details: authResponse.data,
+                        });
+                    }
                 }
-
             } catch (error) {
-                console.error(`Service ${seshServiceUrl} failed on attempt #${attempt}:`, error.response?.data || error.message);
-                lastError = error.response ? error.response.data : { message: error.message };
+                console.log(`Error on attempt #${attempt} with service URL: ${seshServiceUrl}`);
+                console.error(error);
+                lastError = error;
 
                 if (attempt === maxRetries) {
                     console.log(`Instance ${seshServiceUrl} not working, checking next.`);
@@ -506,10 +527,11 @@ app.post('/session/transfer-character', updateRequestCount, async (req, res) => 
         }
     }
 
-    // Return the last captured error after all retries fail
-    const errorMessage = lastError || { message: 'Unknown error occurred in all session service instances' };
-    res.status(500).json(errorMessage);
+    // After all instances fail, respond with an error message
+    const errorMessage = lastError ? lastError.message : 'Unknown error';
+    res.status(500).json({ error: 'Character transfer failed. All instances are down.', details: errorMessage });
 });
+
 
 
 
